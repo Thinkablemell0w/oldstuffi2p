@@ -1,0 +1,51 @@
+#!/bin/bash
+
+
+
+qubes_vm_type="$(qubesdb-read /qubes-vm-type)"
+
+
+
+
+
+config_foxyproxy(){
+echo "Configuring Foxyproxy"
+
+#disable Addon Signature verification 
+#echo 'pref("xpinstall.signatures.required", false);' > /home/user/.tb/tor-browser/Browser/TorBrowser/Data/Browser/profile.default/preferences/addons_unsigned_allow.js
+
+#create symlink and copy custom foxyproxy rules 
+echo "\nAdding custom Foxyproxy Rules to TorBrowser" 
+if [ -d /home/user/.tb/tor-browser/Browser/TorBrowser/ ];then
+	if [ -d /usr/share/xul-ext/foxyproxy-standard/ ];then
+		ln -s /usr/share/xul-ext/foxyproxy-standard/ /home/user/.tb/tor-browser/Browser/TorBrowser/Data/Browser/profile.default/extensions/foxyproxy@eric.h.jung
+	    	cp /usr/share/usability-misc/tbb-foxyproxy/foxyproxy.xml /home/user/.tb/tor-browser/Browser/TorBrowser/Data/Browser/profile.default/
+        	echo "Foxyproxy copied to TBB"
+	else 
+        	if [ -d /home/user/.tb/tor-browser/Browser/TorBrowser/Data/Browser/profile.default/extensions/foxyproxy@eric.h.jung ];then
+            		cp /usr/share/usability-misc/tbb-foxyproxy/foxyproxy.xml /home/user/.tb/tor-browser/Browser/TorBrowser/Data/Browser/profile.default/
+        	else 
+            		echo "Foxyproxy not found, install it via the addons site"
+		fi
+	fi
+
+else
+	echo "TBB not found starting Whonix Tor Downloader"
+	update-torbrowser --noask
+	if [ -d /home/user/.tb/tor-browser/Browser/TorBrowser/ ];then
+		config_foxyproxy
+	else
+		echo "TBB not found"
+fi	
+echo "OK"
+}
+#check in what kind of VM we're runnign
+if [ "$qubes_vm_type" = "AppVM" ]; then
+    sleep 1
+    if [ -e /usr/share/anon-ws-base-files/workstation ]; then
+        config_foxyproxy
+    else
+		echo "Wrong VM"    
+    fi
+    
+fi

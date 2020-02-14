@@ -1,0 +1,136 @@
+#!/bin/sh
+
+set -e
+
+if [ `id -u ` -ne 0 ]; then 
+
+    echo "This script must be run as root" 
+
+    exit 1 
+
+fi
+
+LOGPATH="/var/log/anon-i2p-config.log"
+GATEWAYIP=$(ifconfig eth1 | grep "inet" | cut -d ":" -f 2 | cut -d "B" -f 1)
+I2P="/var/lib/i2p/i2p-config"
+I2PROUTER="/usr/bin/i2prouter"
+WRAPPER="/etc/i2p/wrapper.config"
+FILES="
+/usr/bin/i2p-launcher
+/usr/share/icons/anon-icon-pack/i2p*
+/etc/qubes/suspend-post.d/30_i2p_start.sh
+/etc/qubes/suspend-pre.d/30_i2p_restart.sh
+/usr/lib/i2p/i2p.sh"
+
+
+disclaimer(){
+
+echo "Disclaimer \n"
+echo "This script will makes persistent changes to Whonix "
+echo "It could degrease your Anonymity or make Whonix Leak Information"
+echo "If you rely on strong Anonymity and are exposed to a large Advesary"
+echo "!!If any of that's the case Please dont use this !!"
+echo "The Author takes no Responsibility if anything breaks \n"
+echo "The following changes will be made: \n"
+echo "--Changes the Default I2P Settings" 
+echo "--Configure Firewall Settings to Only Allow I2P to connect to the Clearnet"
+echo "--Configure I2P to automatically start at boot"
+echo -n "\nAre you sure you wish to continue? (y/n)  " 
+
+
+read ans 
+case $ans in 
+
+    y*|Y*|j*|J*) 
+        ;; 
+    *) 
+        exit 0 
+        ;; 
+esac 
+}
+
+
+config_i2p(){
+
+echo "Configuring I2P" 2>&1 | tee -a $LOGPATH
+#launching i2p to copy user config files
+systemctl start i2p
+sleep 5
+systemctl stop i2p
+
+# Remove the "i2prouter" script, its man page, and its apparmor profile
+#rm /etc/apparmor.d/usr.bin.i2prouter /usr/share/man/man1/i2prouter.1.gz
+
+# Remove the outproxy from the tunnel on port 4444
+# This will remove the following lines:
+#      tunnel.0.proxyList=false.i2p
+#      tunnel.0.option.i2ptunnel.httpclient.SSLOutproxies=false.i2p
+# The SSLOutproxies option was first set in I2P 0.9.15
+sed -i '/^.*tunnel\.0\.\(proxyList\|option\.i2ptunnel\.httpclient\.SSLOutproxies\)/d' "$I2P/i2ptunnel.config"
+
+# Disable the https outproxy (port 4445)
+sed -i 's|^.*\(tunnel\.6\.startOnLoad\).*|\1=false|' "$I2P/i2ptunnel.config"
+
+# Don't serve the router console on IPv6
+sed -i 's|^clientApp\.0\.args=7657\s\+::1,127\.0\.0\.1|clientApp.0.args=7657 127.0.0.1|' "$I2P/clients.config"
+
+# Disable IPv6 in the wrapper
+sed -i 's|^.*\(wrapper\.java\.additional\.5=-Djava\.net\.preferIPv4Stack=\).*|\1true|' "$WRAPPER"
+sed -i 's|^.*\(wrapper\.java\.additional\.6=-Djava\.net\.preferIPv6Addresses=\).*|\1false|' "$WRAPPER"
+echo "Changing I2Ps listening IP" 2>&1 | tee -a $LOGPATH
+#Change the Listening IP from Localhost to the Whonix-Gateway Ip
+sed -i "s/\(.*interface=\).*/\1$GATEWAYIP/g;s/\(.*targetHost=\).*/\1$GATEWAYIP/g" "$I2P/i2ptunnel.config"
+sed -i "s/127\.0\.0\.1/$GATEWAYIP/g" "$I2P/clients.config"
+#changing the console back to localhost
+sed -i "s/clientApp\.0\.args\=7657 \:\:1\,$GATEWAYIP/clientApp\.0\.args\=7657 \:\:1\,127\.0\.0\.1 \./g" $I2P/clients.config
+echo "susimail.host=$GATEWAYIP" >> /usr/share/i2p/susimail.config
+echo "OK"
+
+# Tails/Whonix specific router configs:
+# * In-I2P Network Updates: Disabled
+# * Disable upnp
+cat >> "$I2P/router.config" << EOF
+# NOTE: This I2P config file must use UTF-8 encoding
+router.updateDisabled=true
+i2np.upnp.enable=false
+router.reseedProxy.authEnable=false
+router.reseedProxyEnable=false
+router.reseedSSLDisable=false
+router.reseedSSLProxy.authEnable=false
+router.reseedSSLProxyEnable=true
+router.reseedSSLProxyHost=127.0.0.1
+router.reseedSSLProxyPort=9050
+router.reseedSSLProxyType=SOCKS5
+router.reseedSSLRequired=false
+EOF
+
+cat > "$I2P/susimail.config" << EOF
+susimail.pop3.leave.on.server=true
+EOF
+
+# enforce apparmor , disabled atm
+#echo Setting the I2P apparmor profile to enforce mode
+#sed  -i -re 's|flags=\(complain\)||' /etc/apparmor.d/system_i2p
+#echo "OK"
+
+#reset the permissions
+chown -R i2psvc /usr/share/i2p/ 
+chown -R i2psvc /var/lib/i2p/
+
+echo "Done setting Everything Up , on the next Reboot of your ProxyVm \n I2P should start up and you can access it via your Whonix-Workstation"
+}
+
+qubes_vm_type="$(qubesdb-read /qubes-vm-type)"
+
+#check in what kind of VM we're runnign
+if [ "$qubes_vm_type" = "ProxyVM" ]; then
+
+    if [ -e /usr/share/anon-gw-base-files/gateway ]; then
+        disclaimer
+        config_i2p
+    else
+		echo "Wrong VM"    
+    fi
+
+    
+fi

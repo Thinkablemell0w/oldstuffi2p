@@ -1,0 +1,102 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:     i2p-tor-whonix-socat-ws
+# Required-Start: $local_fs $time $network $named
+# Required-Stop: $local_fs $time $network $named
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Redirect Tor and I2P ports to whonix-gateway
+#
+# Description: This init script sets up forwarding of Tor and I2P ports to the
+#              Whonix gateway. Ex: 127.0.0.1:7657 will be forwarded to
+#              10.137.x.1:7657
+### END INIT INFO
+
+NAME=socat
+DAEMON=/usr/bin/socat
+SOCAT_DEFAULTS="-d -lf /var/log/socat.log"
+WHONIX_GATEWAY=$(ip ro sho | awk '/^default/{print $3}')
+PORTS="9050 9150 9119 9152 2827 3456 4444 4445 6668 7622 7650 7651 7654 7656 7657 7658 7659 7660 7661 7662 8998"
+
+. /lib/lsb/init-functions
+[ -f /etc/default/i2p-tor-whonix-socat-ws ] && . /etc/default/i2p-tor-whonix-socat-ws
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+
+[ -x $DAEMON ] || exit 0
+
+start_socat() {
+    for port in $PORTS; do
+        start-stop-daemon --oknodo --quiet --start \
+            --pidfile /var/run/i2p-whonix-${port}.pid \
+            --background --make-pidfile \
+            --exec $DAEMON -- $SOCAT_DEFAULTS $OPTIONS TCP-LISTEN:$port,fork TCP:$WHONIX_GATEWAY:${port} < /dev/null
+    done
+}
+
+stop_socat() {
+    for PIDFILE in /run/i2p-tor-whonix-socat-ws-*.pid; do
+        start-stop-daemon --oknodo --stop --quiet --pidfile $PIDFILE --exec $DAEMON
+        rm -f $PIDFILE
+    done
+}
+
+start() {
+    start_socat
+    return $?
+}
+
+stop() {
+    stop_socat
+    return $?
+}
+case "$1" in
+    start)
+        log_daemon_msg "Forwarding I2P and Tor ports to Whonix Gateway"
+        if start; then
+            log_end_msg $?
+        else
+            log_end_msg $?
+        fi
+        ;;
+    stop)
+        log_daemon_msg "Stop fowarding I2P and Tor ports to Whonix Gateway"
+        stop_socat
+        if stop; then
+            log_end_msg $?
+        else
+            log_end_msg $?
+        fi
+        ;;
+    status)
+        if $(ls /run/i2p-tor-whonix-socat-ws-*.pid >/dev/null); then
+            echo "Currently forwarding ports to Whonix-Gateway:"
+            for port in $(ls /run/i2p-tor-whonix-socat-ws-*.pid |cut -c17- | sed 's/\.pid//'); do echo -n "$port"; done
+            echo
+        else
+            echo "Not forwarding I2P and Tor ports." >&2
+        fi
+        ;;
+
+    restart|force-reload)
+        log_daemon_msg "Restarting $DESC" "$NAME"
+        stop
+        case "$?" in
+            0|1)
+                start
+                case "$?" in
+                    0) log_end_msg 0 ;;
+                1) log_end_msg 1 ;; # Old process is still running
+            *) log_end_msg 1 ;; # Failed to start
+        esac
+        ;;
+    *)
+        # Failed to stop
+        log_end_msg 1
+        ;;
+esac
+;;
+    *)
+        echo "Usage: $0 {start|stop|status|restart|force-reload}" >&2
+        ;;
+esac

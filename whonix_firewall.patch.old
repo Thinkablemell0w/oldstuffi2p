@@ -1,0 +1,121 @@
+--- whonix_firewall	2013-08-15 13:02:35.000000000 +0200
++++ whonix_firewall2	2016-03-28 11:40:28.036000000 +0200
+@@ -85,7 +85,9 @@
+ [ -n "$CLEARNET_USER" ] || CLEARNET_USER="$(id -u clearnet)"
+ [ -n "$USER_USER" ] || USER_USER="$(id -u user)"
+ [ -n "$ROOT_USER" ] || ROOT_USER="$(id -u root)"
+-
++[ -n "$I2P_USER"  ] || I2P_USER="$(id -u i2psvc)"
++ 
++echo "OK: I2P_USER: $I2P_USER"
+ echo "OK: TOR_USER: $TOR_USER"
+ echo "OK: CLEARNET_USER: $CLEARNET_USER"
+ echo "OK: USER_USER: $USER_USER"
+@@ -215,6 +217,27 @@
+ [ -n "$SOCKS_PORT_YUM" ] || SOCKS_PORT_YUM="9125"
+ [ -n "$SOCKS_PORT_TBB_DEFAULT" ] || SOCKS_PORT_TBB_DEFAULT="9150"
+ 
++## I2P Ports
++[ -n "$I2P_BOB" ] || I2P_BOB="2827"
++[ -n "$TAHOE" ] || TAHOE="3456"
++[ -n "$I2P_WWW" ] || I2P_WWW="4444"
++[ -n "$I2P_WWW2" ] || I2P_WWW2="4445"
++[ -n "$I2P_IRC" ] || I2P_IRC="6668"
++[ -n "$I2P_XMPP" ] || I2P_XMPP="7622"
++[ -n "$I2P_CONTROL" ] || I2P_CONTROL="7650"
++[ -n "$I2P_SOCKSIRC" ] || I2P_SOCKSIRC="7651"
++[ -n "$I2P_SOCKS" ] || I2P_SOCKS="7652"
++[ -n "$I2P_I2CP" ] || I2P_I2CP="7654"
++[ -n "$I2P_SAM" ] || I2P_SAM="7656"
++[ -n "$I2P_CON" ] || I2P_CON="7657"
++[ -n "$I2P_EEP" ] || I2P_EEP="7658"
++[ -n "$I2P_SMTP" ] || I2P_SMTP="7659"
++[ -n "$I2P_POP" ] || I2P_POP="7660"
++[ -n "$I2P_BOTESMTP" ] || I2P_BOTESMTP="7661"
++[ -n "$I2P_BOTEIMAP" ] || I2P_BOTEIMAP="7662"
++[ -n "$I2P_MTN" ] || I2P_MTN="8998"
++
++
+ ##+# #OptionalFeatureNr.4# More Socks Ports.
+ ##
+ ## Adding more Socks Ports here should no longer be necessary.
+@@ -425,6 +448,24 @@
+       $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$SOCKS_PORT_YUM" -j ACCEPT
+       $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$SOCKS_PORT_TBB_DEFAULT" -j ACCEPT
+ 
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_BOB" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$TAHOE" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_WWW" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_WWW2" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_XMPP" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_IRC" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_CONTROL" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_SOCKSIRC" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_SOCKS" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_I2CP" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_SAM" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_CON" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_EEP" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_SMTP" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_POP" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_BOTESMTP" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_BOTEIMAP" -j ACCEPT
++      $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --dport "$I2P_MTN" -j ACCEPT
+       ##+# #OptionalFeatureNr.4# Allow more Socks Ports.
+       ## See /etc/tor/torrc for more comments.
+       ## Custom Ports #1:
+@@ -435,6 +476,8 @@
+       $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --match multiport --dports 9170:9179 -j ACCEPT
+       ## Custom Ports #4:
+       $iptables_cmd -A INPUT -i "$int_tif_item" -p tcp --match multiport --dports 9180:9189 -j ACCEPT
++
++ 
+    fi
+ done
+ 
+@@ -476,6 +519,25 @@
+    $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$SOCKS_PORT_YUM" -j REDIRECT --to-ports "$SOCKS_PORT_YUM"
+    $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$SOCKS_PORT_TBB_DEFAULT" -j REDIRECT --to-ports "$SOCKS_PORT_TBB_DEFAULT"
+ 
++   #I2P
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_BOB" -j REDIRECT --to-ports "$I2P_BOB"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$TAHOE" -j REDIRECT --to-ports "$TAHOE"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_WWW" -j REDIRECT --to-ports "$I2P_WWW"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_WWW2" -j REDIRECT --to-ports "$I2P_WWW2"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_IRC" -j REDIRECT --to-ports "$I2P_IRC"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_CONTROL" -j REDIRECT --to-ports "$I2P_CONTROL"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_SOCKSIRC" -j REDIRECT --to-ports "$I2P_SOCKSIRC"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_SOCKS" -j REDIRECT --to-ports "$I2P_SOCKS"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_I2CP" -j REDIRECT --to-ports "$I2P_I2CP"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_XMPP" -j REDIRECT --to-ports "$I2P_XMPP"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_SAM" -j REDIRECT --to-ports "$I2P_SAM"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_CON" -j REDIRECT --to-ports "$I2P_CON"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_EEP" -j REDIRECT --to-ports "$I2P_EEP"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_SMTP" -j REDIRECT --to-ports "$I2P_SMTP"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_POP" -j REDIRECT --to-ports "$I2P_POP"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_BOTEIMAP" -j REDIRECT --to-ports "$I2P_BOTEIMAP"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_BOTESMTP" -j REDIRECT --to-ports "$I2P_BOTESMTP"
++   $iptables_cmd -t nat -A PREROUTING -i "$int_if_item" -p tcp --dport "$I2P_MTN" -j REDIRECT --to-ports "$I2P_MTN"
+    ##+# OptionalFeatureNr.4# More Socks Ports.
+    ##+# Redirection rules for additional SocksPorts.
+    ## See /etc/tor/torrc for more comments.
+@@ -605,6 +667,9 @@
+    $iptables_cmd -t nat -A OUTPUT -m owner --uid-owner "$TOR_USER" -j RETURN
+ fi
+ 
++## No NAT for I2P itself.
++$iptables_cmd -t nat -A OUTPUT -m owner --uid-owner "$I2P_USER" -j RETURN
++
+ ## No NAT for clearnet user.
+ $iptables_cmd -t nat -A OUTPUT -m owner --uid-owner "$CLEARNET_USER" -j RETURN
+ 
+@@ -678,6 +743,9 @@
+    done
+ fi
+ 
++## I2P is allowed to connect any outside target.
++$iptables_cmd -A OUTPUT -m owner --uid-owner "$I2P_USER" -j ACCEPT
++
+ ## clearnet user is allowed to connect any outside target.
+ $iptables_cmd -A OUTPUT -m owner --uid-owner "$CLEARNET_USER" -j ACCEPT
+ 

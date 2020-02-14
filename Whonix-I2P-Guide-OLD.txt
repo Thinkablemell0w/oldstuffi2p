@@ -1,0 +1,355 @@
+	Qubes Whonix Guide
+	Table of Content
+	
+	
+	Disclaimer
+	Preperation
+	Installing I2P
+	Editing the firewall rules
+	Making the I2P folders persistent in the ProxyVm 
+	Changing I2P's listening interface
+	Installing and Configuring FoxyProxy
+	 Forwarding I2P ports from the workstation to the gateway
+	Enabling and starting I2P
+	Additional software
+	Other notes
+	Resources
+	Known Issues
+
+
+						
+						
+						DISCLAIMER 
+This HowTo originated Killyourtv.i2p and went offline when Kytv went MIA , so I ( Goldstein ) updated it to the Current Qubes-OS Whonix Version
+(all Killyourtv services went down see http://zzz.i2p/topics/2098-all-kytv-services-down)
+
+THIS IS STILL A WORK IN PROGRESS 
+If you rely on strong security dont use this yet
+This Guide will change or get obsolete soon 
+
+Guide to Run I2P inside Whonix Gateway and make it accesible via Whonix Workstation and Redirect all non i2P requests trough TOR
+
+The Whonix site suggests running I2P on the Whonix workstation, routing all I2P traffic over Tor.
+ If you care about Tor or I2P, DON'T DO THIS! It would be far better to install I2P on the Whonix gateway and acess THAT from the workstation. This guide describes one way of acheiving this...
+
+The steps in this document have been tested with I2P 0.9.25 and Whonix-(Gateway|Workstation) running in Qubes and will likely work with future versions with minor modifications.
+
+
+
+    
+Preparation    
+    
+ If you plan on using two Whonix Gateways (one for I2P and Tor and one for Tor only) create a seperate Gateway ProxyVm and Workstation AppVM
+
+
+
+Installing I2P
+
+
+We'll install I2P using the Debian packages.from the 'official' I2P project's. (Kytv used to build the packages used by both (his repo and the offical )(see Disclaimer) ).
+
+on the Whonix-Gateway Template add the I2P Repository to /etc/apt/sources.list.d/i2p.list  via
+
+	user@host:~$ sudo nano /etc/apt/sources.list.d/i2p.list
+	
+Paste this into the newly created file
+	
+	deb http://deb.i2p2.no stable main
+	
+After adding the repo,download the i2p debian repo key
+
+	user@host:~$ wget.anondist https://geti2p.net/_static/i2p-debian-repo.key.asc
+	
+Verify the File 
+
+	user@host:~$ sha512sum < i2p-debian-repo.key.asc 
+	
+The Result should be (Note I created the Checksum after Downloading and manually Verifying it (as none was provided by I2P #todo write i2p devs to provide checksums), so you have to trust me that its sane or Verfify it Manually yourself)
+	
+	b08772408d32fd84ff414d241d3b78baea278b3388186d8e34aed8579c68e643868ee4d3c3f0beb8424bc1e4ac4288b335f9c28781b8282b5dda69f49dbe2922  -
+	
+after  Verifying add the i2p debian Key to Apt
+	
+	user@host:~$ sudo apt-key add i2p-debian-repo.key.asc
+
+After adding the key, update the package lists.
+	
+	user@host:~$ sudo apt-get update
+
+
+Now we can install I2P and its dependencies:
+
+	user@host:~$ sudo apt-get install i2p i2p-keyring
+
+Within a few minutes, I2P and its dependencies will be downloaded and installed.
+ 
+ Don't start I2P yet!
+ 
+ 
+Editing the firewall rules
+#New  currently TESTING  Method 
+
+Add the settings in the Whonix-Firewall (/etc/whonix_firewall.d/50_user.conf ) (Uncomment any SocksPort you dont need)
+
+NO_NAT_USERS+=" $(id -u i2psvc)"
+GATEWAY_TRANSPARENT_DNS=1
+SOCKS_PORT_I2P_BOB=2827
+SOCKS_PORT_I2P_TAHOE=3456
+SOCKS_PORT_I2P_WWW=4444
+SOCKS_PORT_I2P_WWW2=4445
+SOCKS_PORT_I2P_IRC=6668
+SOCKS_PORT_I2P_XMPP=7622
+SOCKS_PORT_I2P_CONTROL=7650
+SOCKS_PORT_I2P_SOCKSIRC=7651
+SOCKS_PORT_I2P_SOCKS=7652
+SOCKS_PORT_I2P_I2CP=7654
+SOCKS_PORT_I2P_SAM=7656
+SOCKS_PORT_I2P_CON=7657
+SOCKS_PORT_I2P_EEP=7658
+	
+SOCKS_PORT_I2P_SMTP=7659
+SOCKS_PORT_I2P_POP=7660
+	
+SOCKS_PORT_I2P_BOTESMTP=7661
+SOCKS_PORT_I2P_BOTEIMAP=7662
+SOCKS_PORT_I2P_MTN=8998
+	
+	
+Now reload the Firewall 
+
+	user@host:~$ sudo /usr/bin/whonix_firewall
+	
+
+I2P Cant Connect to any of the reseed servers 
+Current dirty fix # This will be fixed soon
+
+Start the Whonix-Gateway-Template open a terminal and edit the /etc/resolve.conf 
+
+	sudo nano /etc/resolve.conf
+	
+change the nameserver from 127.0.0.1 to your Gateways Gateway IP (eg. FirewallVm (Open the Qubes Manager and look at the Whonix-Gateway Gateway IP)) 10.137.x.1 save.
+
+
+
+ 
+
+Make the I2P folders persistent in the ProxyVm 
+ (old Method) #works
+by adding the following to /usr/lib/qubes-whonix/bind-directories
+
+(at line 70 right under 'rw/srv/whonix/etc/tor:/etc/tor' )
+
+'/rw/srv/whonix/etc/i2p:/etc/i2p'
+'/rw/srv/whonix/var/lib/i2p/i2p-config:/var/lib/i2p/i2p-config'
+'/rw/srv/whonix/usr/share/i2p:/usr/share/i2p'
+
+
+(new Method)
+by adding the following to  /usr/lib/qubes-bind-dirs.d/40_qubes-whonix.conf 
+
+binds+=( '/etc/i2p' )
+binds+=( '/var/lib/i2p/i2p-config/' )
+
+
+Changing I2P's listening interface
+
+I2P listens for connections on 127.0.0.1. This won't work for us since we want to access I2P from the workstation. 
+We'll setup I2P to listen on the gateway IP, which could be 10.137.x.10 depending on the Whonix version that you're using. Note: 
+By the time we're finished here, you will be able to access I2P from the workstation via 127.0.0.1 as well.
+
+
+Run this command in the Whonix-Gateway Proxyvm 
+
+Run this in the whonix-Gateway
+
+Paste this into a new file named i2pconfig.sh (it changes the listening ip from localhost to the Whonix-Gateway IP)
+
+#!/usr/bin/bash
+GATEWAYIP=$(cat /var/cache/qubes-whonix/whonix-ip-gateway)
+echo "Your Gateway Ip is :"
+echo $GATEWAYIP
+sed -i "s/\(.*interface=\).*/\1$GATEWAYIP/g;s/\(.*targetHost=\).*/\1$GATEWAYIP/g" /var/lib/i2p/i2p-config/i2ptunnel.config
+sed -i "s/127\.0\.0\.1/$GATEWAYIP/g" /var/lib/i2p/i2p-config/clients.config
+echo "susimail.host=$GATEWAYIP" >> /usr/share/i2p/susimail.config
+echo "Done"
+
+
+run it 
+
+	user@host:~$sudo ./i2pconfig.sh
+
+
+If you want to use the included jetty for hosting eepsites, run the following to change its listening address to the gateway IP:
+
+	user@host:~$ sed -i "s;\(<Set name=\"host\">\).*\(</Set>\);\1$(cat /var/cache/qubes-whonix/whonix-ip-gateway)\2;g" /usr/share/i2p/eepsite/jetty.xml
+
+
+
+Installing and Configuring FoxyProxy
+# all this Happens  in the Whonix-Workstation AppVM
+
+Open the TorBrowser, go to the Tools menu, then Addons. In the Search all add-ons box, enter Foxyproxy. From the results list, install FoxyProxy Standard
+
+Once installed, right click on the Foxyproxy Icon in the Toolbar and select Options, click on File at the Toolbar and select import Settings . Navigate to /usr/share/usability-misc/tbb-foxyproxy/foxyproxy.xml
+Click on both pop-ups yes to import and to reboot the TorBrowser
+
+Done you've imported the Foxyproxy rules now whenever you enter a i2p Url it will get send to the i2p router and the rest trough tor 
+
+
+
+Forwarding Whonix-Workstations Ports to Whonix-Gateway local Ports
+
+We'll set up the actual forwarding with this initscript. Save it to the Whonix-Workstation-Template copy it to /etc/init.d/i2p-whonix, set the executable bit, and enable it to run at start up.
+
+	user@host:~$ wget https://raw.githubusercontent.com/cle4r/var/master/i2p-whonix
+
+Verify the downloaded file
+
+	user@host:~$ sha512sum < i2p-whonix
+	
+Should Output
+
+	2e12f13c309f5a366972b7b06bb109eb351bd28ce3d90ee596c0d479648d27da9fa577a6dd8d2d35a909e6868e587e343fd056398a4b3f63931a56648262d517
+
+	user@host:~$ sudo cp i2p-whonix /etc/init.d/i2p-whonix
+	user@host:~$ sudo chmod +x /etc/init.d/i2p-whonix
+	user@host:~$ sudo update-rc.d i2p-whonix defaults
+
+The initscript will forward the following ports:
+
+    2727, BOB: BOB is an application bridge allowing non-Java clients to interact with I2P
+    3456, Tahoe-LAFS port (if installed)
+    4444, I2P HTTP Proxy: Used to access sites with the .i2p TLD
+    4445, I2P HTTP Proxy: Used to access sites with the .i2p TLD. (As I explain on the FoxyProxy page, I change the standard eepSite tunnel to use ed25519 but use part 4445 to access sites whose I2P routers are too old to support ed25519)
+    6668, Tunnel to Irc2P: Used to connect to the main I2P-only IRC network
+    7622, A suggested port for XMPP, such as connecting to the the http://salt.i2p XMPP server (needs tunnel created)
+    7650, I2PControl port
+    7651, A suggested port for SOCKSIRC access (needs tunnel created)
+    7654, the I2CP port
+    7656, SAM: SAM is an application bridge allowing non-Java clients to use I2P. More information: SAMv1, SAMv2,
+    7657, I2P router console: The router console is accessible in the web browser at http://127.0.0.1:7657
+    7658, local 'eepsite': Each I2P installation is configured out of the box with the possibility to host one's own website (or eepsite) on the I2P network. The eepsite will not be acessible remotely unless its tunnel is started.
+    7659, SMTP Proxy: Tunnel to smtp.postman.i2p. More information is available from within I2P at Postman's HQ
+    7660, POP3 Proxy: Tunnel to pop3.postman.i2p. More information is available from within I2P at Postman's HQ
+    7661, SMTP for I2P-Bote (if installed)
+    7662, IMAP for I2P-Bote (if installed)
+    8998, MTN Proxy: Tunnel to mtn.i2p2.i2p, a Monotone server.
+
+Feel free to add (or remove) any ports for your needs. Note that any additions will require changes to /etc/whonix_firewall.d/50_user.conf on the Whonix-Gateway-Template.
+
+
+Enabling and starting I2P
+
+Run the following at a prompt on your Whonix Gateway Template
+
+	user@host:~$ sudo dpkg-reconfigure i2p
+
+When asked if I2P should run at start-up, pick yes. Keep the user as i2psvc. 
+Feel free to change the memory allocation if you plan on adding a bunch of plugins or taking part in heavy-duty torrenting..
+
+
+## Usage 
+
+I2PMail
+
+To use a mail client like Icedove or Claws, just configure SMTP for 127.0.0.1, port 7659 and POP for 127.0.0.1, port 7660.
+IRC
+
+To connect to Irc2P, just point your preferred IRC client to 127.0.0.1, port 6668. Make sure you are not going through a proxy.
+Additional software
+
+I2P related software that works fine with this set-up (any software listed here is either in my package repository, or Debian's):
+				Software         Install Location       Notes
+			Anoncoin         Workstation         You cannot set the proxy in the Anoncoin GUI due to a bug. Instead, set it in ~/.anoncoin/aoncoin.conf. To connect over I21P, make sure SAM is enabled.
+				Git                      Either         Does not work over I2P since Git is forced to use torsocks via the uwt wrapper. Could probably disable the uwt wrapper to make it work.
+		Grid-Updates         Gateway         Could also be installed on the workstation, but of course synching the server list wouldn't work
+		I2P-Control             Gateway         Install the plugin from http://itoopie.i2p or http://plugins.i2p/plugins/i2pcontrol/. Shut down I2P. Edit ~i2psvc/i2p-config/plugins/I2PControl/I2PControl.conf and set i2pcontrol.listen.address=10.137.x.x
+			Itoopie            Workstation         See notes for I2PControl
+		I2P-Messenge    Workstation         Make sure SAM is enabled
+			Monotone             Either         Both I2P and Tor work, meaning you can reach mtn://10.137.x.x:8998 and mtn://kytvi2pll2jw5gip.onion
+			Syndie            Workstation         Archives on I2P will work. Archives on Tor will not without setting up privoxy or polipo.
+		Tahoe-LAFS             Both               I'd advise installing on the gateway as per the instructions, setting the proxy to point to 10.152.152.10 (or whatever your Whonix-Gateway's IP is), port 4444, and installing on the workstation. On the workstation, create the directory ~/.tahoe/ and inside of it create a file called node.url with the contents of http://127.0.0.1:3456 This way you'll only run one instance of Tahoe-LAFS but you'll be able to access it from both the gateway and the workstation.
+
+I have not had success with getting Robert to work, but to be fair I haven't tried very hard. It's likely that one needs to run a standalone BOB on the workstation. Search http://forum.i2p for hints.
+Other notes
+
+    It's been said that the Whonix dev doesn't recommend this set-up to avoid IP address leaks due to the IP address being shown at http://127.0.0.1:7657/netdb?r=. when not running in hidden mode, and that the workstation should not know what its IP is. If that's a problem, why not set a password for the router console at http://127.0.0.1:7657/configui? Or set up I2P and then disable access to the router console?
+    Torrenting with I2PSnark will work, and the files will be saved on the Whonix-Gateway to /var/lib/i2p/i2p-config/i2psnark. See https://www.whonix.org/wiki/File_Transfer for information about transfering the files to your host or to the workstation. Another option would be to use libguestfs on your host.
+
+    
+    Ressources
+    I2p Docs
+    https://geti2p.net/en/docs
+    https://geti2p.net/en/get-involved/develop/applications
+    https://geti2p.net/spec/configuration
+    
+    I2PControl API
+    https://geti2p.net/de/docs/api/i2pcontrol
+    
+    Telecomix I2p Wiki entry
+    https://cryptoanarchy.freed0m4all.net/wiki/I2P
+    
+    I2PControl Api Python script
+    https://github.com/i2p/i2p.scripts/blob/master/i2pcontrol/i2pcontrol.py
+    
+    Tor with I2p setup (some nice scripts)
+    https://github.com/znoxx/torbox/blob/master/scripts/install/i2pinst.sh
+    
+    Replace IP Whonix Script
+    https://github.com/Whonix/qubes-whonix/blob/master/usr/lib/qubes-whonix/replace-ips
+    
+    Whonix Forum Post about I2P
+    https://forums.whonix.org/t/i2p-running-on-whonix-gateway/2163/10
+    
+    Sys-Whonix Time Skew after suspend
+    https://groups.google.com/forum/#!topic/qubes-users/QO4He5mZDzc
+    
+    Whonix Timesync
+    https://www.whonix.org/wiki/Dev/TimeSync
+    
+    Whonix Gateway Dns 
+    https://github.com/Whonix/anon-gw-dns-conf
+    
+    Customizing Whonix Firewall / torified dom0 upgrades
+	https://forums.whonix.org/t/customizing-whonix-firewall-torified-dom0-upgrades/
+	
+	https://forums.whonix.org/t/socat-running-on-ws-called-from/
+	
+	https://forums.whonix.org/t/bolt-on-for-whonix-firewall-best-place-to-put-files/
+	
+	 sys-whonix doesn't connect to Tor after system suspend #1764 
+	https://github.com/QubesOS/qubes-issues/issues/1764#issuecomment-195619793
+	
+	I2P - Debian Page
+	https://geti2p.net/en/download/debian
+	
+	I2P Bootstrap Script 
+	https://thetinhat.com/tutorials/darknets/i2p-bootstrap-script.html
+	
+	Configuring I2P Services  ## Seems reasonable
+	http://dione.no-ip.org/wordpress/computing/configuring-i2p-services/
+	
+	I2P - Ubuntu Community
+	https://help.ubuntu.com/community/I2P
+	
+	Tails - I2P Docs
+	https://tails.boum.org/contribute/design/I2P/
+	
+	I2p - Default Systemd service
+	https://github.com/i2p/i2p.i2p/blob/master/debian/i2p.service
+	
+	I2P- Default Init.d script
+	https://github.com/i2p/i2p.i2p/blob/master/debian/i2p.init
+	
+	Meehs init.d script (#! CAUTION the Inproxy messes with the config by adding .xyz to .i2p (eg /folder/folder/.i2p.xyz #!)
+	http://wiki.meeh.i2p.xyz/doku.php?id=hosting:initd.script
+    
+    Whonix transition from init.d to systemd 
+    https://phabricator.whonix.org/T106
+    https://github.com/Whonix/control-port-filter-python/commit/d8e1d5711d2a71a9ab638c03e84a0d9b48d7ae48
+    
+	Known Issues
+	
+		
+		
+

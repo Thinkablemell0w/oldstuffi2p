@@ -1,0 +1,226 @@
+#!/bin/sh
+
+if [ `id -u ` -ne 0 ]; then 
+
+    echo "This script must be run as root" 
+
+    exit 1 
+
+fi
+
+set -e
+
+LOGPATH="/var/log/anon-i2p-config.log"
+I2PROUTER="/usr/bin/i2prouter"
+
+disclaimer() {
+echo "Disclaimer \n"
+echo "This script will makes persistent changes to Whonix "
+echo "It could degrease your Anonymity or make Whonix Leak Information"
+echo "When you rely on strong Anonymity and are exposed to a large Advesary"
+echo "!!If any of that's the case Please dont use this !!"
+echo "The Author takes no Responsibility if anything breaks \n"
+echo "The following changes will be made:\n"
+echo "--Add the I2P Repositories"
+echo "--Update the system's packages" 
+echo "--Install I2P, custom Init.d script"
+echo "--Configure Firewall Settings to Only Allow I2P to connect to the Clearnet"
+echo "--Make I2P's directories persistent "
+echo "--Install Iceweasel \n"
+
+
+
+echo -n "Are you sure you wish to continue? (Y/n)  " 
+
+read ans 
+case $ans in 
+
+    y*|Y*|j*|J*) 
+        ;; 
+    *) 
+        exit 0 
+        ;; 
+esac 
+}
+
+install_i2p() {
+echo "---- Log start $(date) ----" >> $LOGPATH
+echo "Installing I2P " 2>&1 | tee -a $LOGPATH
+
+#Add I2P Repo
+if [ -e /etc/apt/sources.list.d/i2p.list ];then
+    echo "Found the I2P Repository" 2>&1 | tee -a $LOGPATH
+    echo "OK" 
+else     
+    echo "Adding the I2P Repository to the Apt list" 2>&1 | tee -a $LOGPATH
+    cat  > /etc/apt/sources.list.d/i2p.list << EOF
+deb http://deb.i2p2.no/ stable main
+#deb-src http://deb.i2p2.no/ stable main
+EOF
+	echo "OK"
+fi
+sleep 1
+
+# Add the I2P repo key if apt doesn't know about it yet
+if ! apt-key fingerprint | fgrep -q "7840 E761 0F28 B904 7535  49D7 67EC E560 5BCF 1346" > /dev/null 2>&1; then
+    if wget --quiet https://geti2p.net/_static/i2p-debian-repo.key.asc -O $TMPFILE; then
+        echo "Adding the I2P Repo key" 2>&1 | tee -a $LOGPATH
+        apt-key add $TMPFILE
+        rm -f $TMPFILE
+        
+    else
+        # Since fetching with wget failed, let's try getting it from a keyserver
+        echo "Fetching with wget failed, let's try getting it from a keyserver" 2>&1 | tee -a $LOGPATH
+        apt-key adv --keyserver hkp://pool.sks-keyservers.net --recv-key 0x67ECE5605BCF1346
+        
+    fi
+elif apt-key fingerprint | fgrep -q "7840 E761 0F28 B904 7535  49D7 67EC E560 5BCF 1346" > /dev/null 2>&1; then
+	echo "I2P Key found" 2>&1 | tee -a $LOGPATH
+fi
+echo "[I2P Key Added] OK" 2>&1 | tee -a $LOGPATH
+echo "OK"
+
+apt-get update
+apt-get install i2p i2p-keyring iceweasel -y
+#TODO Decide if we should set predefined settings here
+#echo "i2p i2p/daemon boolean true" | debconf-set-selections
+
+#Move Scripts to their right place whonix-i2p 30_i2p_start.sh 30-i2p.sh 30.i2p_restart.sh i2p_config_proxyvm
+echo "Moving the Scripts and Icons to their proper place " 2>&1 | tee -a $LOGPATH
+if [ ! -d /usr/lib/i2p/ ];then
+	mkdir /usr/lib/i2p
+else
+	echo "found /usr/lib/i2p/" 2>&1 | tee -a $LOGPATH
+fi	
+cp i2p.sh /usr/lib/i2p/
+cp i2p-launcher /usr/bin/
+cp res/*.png /usr/share/icons/anon-icon-pack
+cp 30_i2p-start.sh /etc/qubes/suspend-post.d/
+cp 30_i2p-restart.sh /etc/qubes/suspend-pre.d/
+echo "[Moving Scripts] OK" 2>&1 | tee -a $LOGPATH
+
+
+# Install custom i2prouter stub scripts
+for script in ${I2PROUTER} ${I2PROUTER}-nowrapper; do
+	if [ ! -e $script ];then
+		echo "$script not found" 2>&1 | tee -a $LOGPATH
+	else	
+		echo "Removing $script"
+		dpkg-divert --rename --add "${script}"
+		cat > "$script" << EOF
+#!/bin/sh
+echo "This script is not used by Whonix.\n Use sudo i2p-launcher start"
+exit 0
+EOF
+		chmod 755 "$script"
+	fi	
+done
+echo "[Removing I2PRouter Script] OK" 2>&1 | tee -a $LOGPATH
+check_qubes_version
+setup_firewall_rules
+echo "[Adding I2P Firewall Config] OK" 2>&1 | tee -a $LOGPATH
+}
+
+check_qubes_version(){
+	if [ -e /usr/lib/qubes/bind-dirs.sh ] && [ -e /usr/lib/qubes/init/bind-dirs.sh ] ; then
+		setup_persistent_path_qubes32
+		echo "[Adding Peristent Path Config] OK" 2>&1 | tee -a $LOGPATH
+
+
+	else
+		setup_persistent_path_qubes31
+		echo "[Adding Peristent Path Config] OK" 2>&1 | tee -a $LOGPATH
+
+	fi	
+}
+
+setup_persistent_path_qubes32(){
+if grep -Fxq "binds+=( '/etc/i2p' )" /usr/lib/qubes-bind-dirs.d/40_qubes-whonix.conf
+then
+    echo "Skipping Adding I2P's paths to Qubes Persistent Folders" 2>&1 | tee -a $LOGPATH
+else
+	echo "Adding I2P's paths to Qubes Persistent Folders" 2>&1 | tee -a $LOGPATH
+	#Add I2P's paths to Qubes Persistent Folders
+
+	sed -i "$ a binds+=( '/etc/i2p' )" /usr/lib/qubes-bind-dirs.d/40_qubes-whonix.conf
+	sed -i "$ a binds+=( '/var/lib/i2p/i2p-config/' )" /usr/lib/qubes-bind-dirs.d/40_qubes-whonix.conf
+
+fi
+}
+
+setup_persistent_path_qubes31(){
+#old path /usr/lib/qubes-whonix/bind-directories
+#Currently used method 
+#Add I2P's paths to Qubes Persistent Folders
+if grep -Fxq "/rw/srv/whonix/etc/i2p:/etc/i2p" /usr/lib/qubes-whonix/bind-directories
+then
+    echo "Skipping Adding I2P's paths to Qubes Persistent Folders" 2>&1 | tee -a $LOGPATH
+else
+	sed -i "70i \    '/rw/srv/whonix/etc/i2p:/etc/i2p'" /usr/lib/qubes-whonix/bind-directories
+	sed -i "71i \    '/rw/srv/whonix/var/lib/i2p/i2p-config:/var/lib/i2p/i2p-config'" /usr/lib/qubes-whonix/bind-directories
+	sed -i "72i \    '/rw/srv/whonix/usr/share/i2p:/usr/share/i2p'" /usr/lib/qubes-whonix/bind-directories
+
+fi	
+}
+
+setup_firewall_rules(){
+echo "Adding Whonix Firewall Rules" 2>&1 | tee -a $LOGPATH
+
+#Add the needed Whonix Firewall User Rules so I2P can connect and is reachable by the Worksation
+if grep -Fxq "SOCKS_PORT_I2P_WWW=4444" /etc/whonix_firewall.d/50_user.conf
+then
+    echo "Rules found, skipping Firewall Rules" 2>&1 | tee -a $LOGPATH
+else
+    cat >> "/etc/whonix_firewall.d/50_user.conf" << EOF
+NO_NAT_USERS+=" $(id -u i2psvc)"
+SOCKS_PORT_I2P_BOB=2827
+SOCKS_PORT_I2P_TAHOE=3456
+SOCKS_PORT_I2P_WWW=4444
+SOCKS_PORT_I2P_WWW2=4445
+SOCKS_PORT_I2P_IRC=6668
+SOCKS_PORT_I2P_XMPP=7622
+SOCKS_PORT_I2P_CONTROL=7650
+SOCKS_PORT_I2P_SOCKSIRC=7651
+SOCKS_PORT_I2P_SOCKS=7652
+SOCKS_PORT_I2P_I2CP=7654
+SOCKS_PORT_I2P_SAM=7656
+SOCKS_PORT_I2P_EEP=7658
+SOCKS_PORT_I2P_SMTP=7659
+SOCKS_PORT_I2P_POP=7660
+SOCKS_PORT_I2P_BOTESMTP=7661
+SOCKS_PORT_I2P_BOTEIMAP=7662
+SOCKS_PORT_I2P_MTN=8998
+EOF
+echo "[Adding I2P Ports to Firewall Rules] OK" 2>&1 | tee -a $LOGPATH
+fi
+
+echo "Reloading Whonix Firewall" 2>&1 | tee -a $LOGPATH
+#Reload Whonix Firewall
+/usr/bin/whonix_firewall
+sleep 1
+
+
+chown -R i2psvc /usr/share/i2p/ 
+chown -R i2psvc /var/lib/i2p/
+echo "Done, now please restart the ProxyVM of this Template to finish the Setup" 2>&1 | tee -a $LOGPATH
+}
+
+
+qubes_vm_type="$(qubesdb-read /qubes-vm-type)"
+if [ -e /usr/share/anon-gw-base-files/gateway ]; then
+    disclaimer 
+   
+fi
+#check in what kind of VM we're runnign
+if [ "$qubes_vm_type" = "TemplateVM" ]; then
+    sleep 1
+    # Display warning that TemplateVM is not connected to a Tor update proxy.
+    if [ ! -e '/var/run/qubes-service/whonix-secure-proxy' ]; then
+        /usr/lib/qubes-whonix/alert update /usr/lib/qubes-whonix/messages.yaml
+    fi    
+    if [ -e /usr/share/anon-gw-base-files/gateway ]; then
+		install_i2p
+    else
+		echo "Wrong VM"
+    fi
+fi

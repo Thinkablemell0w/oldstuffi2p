@@ -1,0 +1,91 @@
+#!/bin/sh
+
+set -e
+
+if [ `id -u ` -ne 0 ]; then 
+
+    echo "This script must be run as root" 
+
+    exit 1 
+
+fi
+
+LOGPATH="/var/log/anon-i2p-config.log"
+
+
+disclaimer(){
+echo "Disclaimer \n"
+echo "This script will makes persistent changes to Whonix "
+echo "It could degrease your Anonymity or make Whonix Leak Information"
+echo "If you rely on strong Anonymity and are exposed to a large Advesary"
+echo "!!If any of that's the case Please dont use this !!"
+echo "The Author takes no Responsibility if anything breaks \n"
+echo "The following changes will be made:\n"
+echo "Add Whonix-I2P Socat Port forwarding Init.d script"
+echo "Install Foxyproxy with custom Proxy Rules"
+echo -n "Are you sure you wish to continue? (y/n)  " 
+
+read ans 
+case $ans in 
+
+    y*|Y*|j*|J*) 
+        ;; 
+    *) 
+        exit 0 
+        ;; 
+esac 
+}
+setup_proxy(){
+#echo "Installing Foxyproxy"
+ echo "This isn't working atm because FF changed the Addons and TB isn't Updated to support them"
+
+#apt-get update && apt-get install xul-ext-foxyproxy-standard
+#echo "[Installed Foxyproxy] OK" >> $LOGPATH
+	
+#Add more proxy options (privoxy,transi2p...)	
+}
+config_ws(){
+
+#Add Socat Port forwarding config
+if [ -d /etc/anon-ws-disable-stacked-tor.d/ ]; then
+    if grep -Fxq "I2P_PORTS" /etc/anon-ws-disable-stacked-tor.d/50_user.conf
+    then
+    echo "Rules found, skipping..." 2>&1 | tee -a $LOGPATH
+    else
+    echo "Adding I2P Ports to the Socat User config"
+    cat >> "/etc/anon-ws-disable-stacked-tor.d/50_user.conf" << EOF
+I2P_PORTS="2827 3456 4444 4445 6668 7622 7650 7651 7654 7656 7658 7659 7660 7661 7662 8998"
+for i2p_port in \$I2P_PORTS; do
+   socat TCP-LISTEN:\$i2p_port,fork TCP:\$GATEWAY_IP:\$i2p_port &
+done
+EOF
+    echo "OK"
+    echo "[Port forwarding configured] OK" >> $LOGPATH
+elif [ ! -d /etc/anon-ws-disable-stacked-tor.d/ ]; then
+    echo "Using old Whonix <13 method"
+    #Move i2p socat forwarding script and enable it
+    mv i2p-whonix-socat-ws /etc/init.d/i2p-whonix-socat-ws
+    chmod +x /etc/init.d/i2p-whonix-socat-ws
+    update-rc.d i2p-whonix-socat-ws defaults
+    echo "OK"
+    echo "[Port forwarding configured] OK" >> $LOGPATH
+else
+    echo "Something went Wrong"
+    echo "[Port forwarding configured] FAILED" >> $LOGPATH
+    
+fi
+}
+
+qubes_vm_type="$(qubesdb-read /qubes-vm-type)"
+
+#check in what kind of VM we're runnign
+if [ "$qubes_vm_type" = "TemplateVM" ]; then
+    disclaimer
+    if [ -e /usr/share/anon-gw-base-files/gateway ]; then
+		config_ws
+		#setup_proxy
+    else
+		echo "Wrong VM"
+    fi
+    
+fi
