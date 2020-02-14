@@ -10,7 +10,7 @@ Installing I2P**
 ### Whonix Gateway (Template)VM
 
 
-**Weâ€™ll install I2P using the Debian-testing packages.**
+**We'll install I2P using the Debian-testing packages.**
 
 **Add the Debian-testing(buster) repo to your APT list**
 
