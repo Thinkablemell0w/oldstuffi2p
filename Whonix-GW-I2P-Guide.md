@@ -11,11 +11,11 @@ Installing I2P**
 ### Whonix Gateway (Template)VM
 
 
-**We'll install I2P using the Debian-testing packages.**
+**We'll install I2P using the I2P Buster Repository.**
 
-**Add the Debian-testing(buster) repo to your APT list**
+**Add the I2P(buster) repo to your APT list**
 
-`sudo su -c "echo -e 'deb tor+http://vwakviie2ienjx6t.onion/debian buster main' > /etc/apt/sources.list.d/testing.list"`
+`sudo su -c "echo -e 'deb https://deb.i2p2.de/ buster main' > /etc/apt/sources.list.d/testing.list"`
 
 **Update Packages**
 
@@ -23,7 +23,7 @@ Installing I2P**
 
 **Install I2P, its dependencies and (optional) iceweasel:**
 
-`sudo apt-get -t buster install i2p`
+`sudo apt-get install i2p`
 
 **Configure I2P as a service that automatically runs when your system boots, set the amount of Ram to your needs and leave the User as i2psvc**
 
@@ -89,7 +89,7 @@ i2np.laptopMode=true
 
 **Disable the Outproxy**
 
-**We donâ€™t want to access the Clearnet with I2P run the following to disable Outproxies**
+**We don't want/need to access the Clearnet with I2P run the following to disable Outproxies**
 
 **Remove the outproxy from the tunnel on port 4444**
 
@@ -118,7 +118,7 @@ i2np.laptopMode=true
 
 ### Whonix Gateway (Proxy)VM
 
-**Changing I2Pâ€™s listening interface**
+**Changing I2P's listening interface**
 
 `GATEWAYIP=$(ip addr | grep 'eth1' | grep -v 'BROADCAST' | cut -d / -f 1 | awk '{print $2}')`
 
