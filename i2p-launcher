@@ -3,52 +3,13 @@
 set -e
 set -u
 
-# Import i2p_built_a_tunnel, i2p_reseed_failed, i2p_router_console_is_ready(),
-# and set_best_i2p_router_console_lang().
 . /usr/lib/i2p/i2p.sh
 
-# Get monotonic time in seconds. See clock_gettime(2) for details.
-# Note: we limit ourselves to seconds simply because floating point
-# arithmetic is a PITA in the shell.
-clock_gettime_monotonic() {
-    perl -w -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC \
-         -E 'say int(clock_gettime(CLOCK_MONOTONIC))'
-}
-
-# Run `check_expr` until `timeout` seconds has passed, and sleep
-# `delay` (optional, defaults to 1) seconds in between the calls.
-# Note that execution isn't aborted exactly after `timeout`
-# seconds. In the worst case (the timeout happens right after we check
-# if the timeout has happened) we'll wait in total: `timeout` seconds +
-# `delay` seconds + the time needed for `check_expr`.
-wait_until() {
-    local timeout check_expr delay timeout_at
-    timeout="${1}"
-    check_expr="${2}"
-    delay="${3:-1}"
-    timeout_at=$(expr $(clock_gettime_monotonic) + ${timeout})
-    until eval "${check_expr}"; do
-        if [ "$(clock_gettime_monotonic)" -ge "${timeout_at}" ]; then
-            return 1
-        fi
-        sleep ${delay}
-    done
-    return 0
-}
-
 I2P_STARTUP_TIMEOUT=60
-
-# When there are network problems (either local or remote), it can take up to 3
-# minutes for all of the current reseed servers to be tried.
 I2P_BOOTSTRAP_TIMEOUT=210
-
-# After the router infos (RIs) are downloaded from the reseed servers
-# it can take 3-5 minutes for a tunnel to be built, e.g.
-# once we get to this point I2P should be ready to be used.
 I2P_TUNNEL_BUILD_TIMEOUT=450
 
 startup_failure() {
-	#Ugly but untill a better solution is found , it works 
     notify-send -t 5000 "I2P failed to start \nSomething went wrong when I2P was starting. Check the logs in /var/log/i2p/ for more information."
     service i2p dump # generate a thread dump
     sleep 5 # Give thread dump ample time to complete
@@ -78,7 +39,6 @@ bootstrap_failure() {
 
 wait_until_i2p_builds_a_tunnel() {
     wait_until ${I2P_TUNNEL_BUILD_TIMEOUT} i2p_built_a_tunnel
-    # static sleep to work around upstream bug.
     sleep 240
     notify-send -i /usr/share/icons/anon-icon-pack/i2p-con.png -t 5000 "I2P build a tunnel" "I2P has successfully built a tunnel"
 }
@@ -90,8 +50,6 @@ notify_bootstrap_success() {
 
 case "${1}" in
     start|restart)
-        # Stop I2P before setting the router console language in case
-        # it pushes any updated options on quit.
         if systemctl --quiet is-active i2p; then
             systemctl stop i2p
         fi
