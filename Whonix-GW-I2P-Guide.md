@@ -99,6 +99,8 @@ i2np.laptopMode=true
 
 `sudo sed -i 's|^.*\(tunnel\.6\.startOnLoad\).*|\1=false|' "/var/lib/i2p/i2p-config/i2ptunnel.config"`
 
+**Optional Settings, skip those you need**
+
 **Disable Jetty**
 
 `sudo sed -i "s/clientApp\.3\.startOnLoad\=true/clientApp\.3\.startOnLoad\=false/g" /var/lib/i2p/i2p-config/clients.config`
@@ -166,7 +168,6 @@ sudo sed -i "s/enforce-blocks 0/enforce-blocks 1/g" /etc/privoxy/config
 ```
 ~*.i2p
 ~*.*.i2p
-~.torproject.org
 ```
 
 
